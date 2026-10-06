@@ -5,7 +5,7 @@ Claude Code plugin marketplace.
 ## Install
 
 ```
-/plugin marketplace add <github-user>/watch-ceb-marketplace
+/plugin marketplace add y4nder/watch-ceb-marketplace
 /plugin install watch-ceb@yander-skills
 ```
 
