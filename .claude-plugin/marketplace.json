@@ -1,0 +1,15 @@
+{
+  "name": "yander-skills",
+  "description": "Claude Code skills by Leander Lorenz Lubguban",
+  "owner": { "name": "Leander Lorenz Lubguban" },
+  "plugins": [
+    {
+      "name": "watch-ceb",
+      "source": "./plugins/watch-ceb",
+      "description": "Watch videos with Cebuano (Bisaya) + English speech, transcribed via Gemini",
+      "version": "0.1.0",
+      "author": { "name": "Leander Lorenz Lubguban" },
+      "license": "MIT"
+    }
+  ]
+}

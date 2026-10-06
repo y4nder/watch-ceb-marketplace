@@ -1,0 +1,7 @@
+{
+  "name": "watch-ceb",
+  "description": "Watch videos with Cebuano (Bisaya) + English speech, transcribed via Gemini. Falls back to stock /watch for other languages.",
+  "version": "0.1.0",
+  "author": { "name": "Leander Lorenz Lubguban" },
+  "license": "MIT"
+}
