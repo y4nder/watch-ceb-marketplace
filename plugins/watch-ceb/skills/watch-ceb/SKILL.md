@@ -22,11 +22,15 @@ Parse the source and any question from the arguments. If the user's message alre
 ## Step 2 — Locate the plugin scripts
 
 ```bash
-WATCH_PY=$(ls -d ~/.claude/plugins/cache/claude-video/watch/*/skills/watch/scripts/watch.py | sort -V | tail -1)
-CEB_DIR=$(ls -d ~/.claude/skills/watch-ceb/scripts ~/.claude/plugins/cache/*/watch-ceb/*/skills/watch-ceb/scripts 2>/dev/null | sort -V | tail -1)
+CFG=${CLAUDE_CONFIG_DIR:-$HOME/.claude}
+WATCH_PY=$(ls -d "$CFG"/plugins/cache/claude-video/watch/*/skills/watch/scripts/watch.py 2>/dev/null | sort -V | tail -1)
+# Prefer the installed plugin copy over a personal ~/.claude/skills copy.
+CEB_DIR=$(ls -d "$CFG"/plugins/cache/*/watch-ceb/*/skills/watch-ceb/scripts "$CFG"/skills/watch-ceb/scripts 2>/dev/null | head -1)
 ```
 
-If `WATCH_PY` is empty, tell the user the `watch` plugin isn't installed and stop.
+If `WATCH_PY` is empty, tell the user the `watch` plugin isn't installed (`/plugin marketplace add bradautomates/claude-video`, then `/plugin install watch@claude-video`) and stop. If `CEB_DIR` is empty, the `watch-ceb` scripts are missing; stop.
+
+Prerequisites: `ffmpeg`/`ffprobe` on PATH (and `yt-dlp` for URLs). If the transcript script reports they are missing, tell the user to install them.
 
 ## Step 3a — "No": stock watch
 
@@ -36,16 +40,20 @@ Read the plugin's `skills/watch/SKILL.md` (sibling of `$WATCH_PY`'s `scripts/` d
 
 Run both, in parallel when possible. Pass the same `--start`/`--end` to both if the user gave a range.
 
+Newer `watch` versions (0.3+) default to `--engine auto`, which uploads the whole video to Gemini whenever `GEMINI_API_KEY` is set and ignores `--no-whisper`. Force local frame extraction when the flag exists:
+
 ```bash
+ENGINE=$(python3 "$WATCH_PY" --help 2>&1 | grep -q -- '--engine' && echo "--engine local")
+
 # Frames only; Whisper is disabled because it can't handle Cebuano.
-python3 "$WATCH_PY" "<source>" --no-whisper [--detail ...] [--start T] [--end T]
+python3 "$WATCH_PY" "<source>" $ENGINE --no-whisper [--detail ...] [--start T] [--end T]
 
 # Transcript. Needs a local file: for a URL, use the video file the watch run downloaded
 # (its report prints the working dir), or `yt-dlp -f bestaudio -o <tmp>/a.%(ext)s <url>`.
 python3 "$CEB_DIR/gemini_transcribe.py" "<local-file>" [--start T] [--end T]
 ```
 
-Key comes from `GEMINI_API_KEY` in `~/.config/watch/.env`. If the script exits with "GEMINI_API_KEY not set", tell the user where to get one (https://aistudio.google.com/apikey) and offer to fall back to stock `/watch`.
+Key comes from `GEMINI_API_KEY` in the environment or `~/.config/watch/.env` (`GEMINI_MODEL` overrides the model list). If the script exits with "GEMINI_API_KEY not set", tell the user where to get one (https://aistudio.google.com/apikey) and offer to fall back to stock `/watch`.
 
 Then follow the stock skill's Steps 3–5: `Read` every frame in one parallel batch, answer the question (or summarize) citing timestamps, and clean up the working dir unless follow-ups are likely.
 
@@ -54,4 +62,5 @@ Then follow the stock skill's Steps 3–5: `Read` every frame in one parallel ba
 - It is Cebuano with English terms left as-is. Answer the user in English unless they write to you in Cebuano. Quote Cebuano lines verbatim and gloss them in English when it matters.
 - Gemini can mishear rare words (e.g. "vibe code" came back as "i-five code"/"i-hardcode"). Treat odd terms as uncertain and use the frames and context to sanity-check before stating them as fact.
 - If `gemini_transcribe.py` fails after its model fallbacks (503 "high demand" is common), retry once later; otherwise offer frames-only or stock Whisper, and warn that Whisper output will be unreliable for Cebuano.
+- Gemini can invent speech for silent, music-only or very noisy audio. If the frames or context show no one talking, or the transcript reads like a scripted conversation that doesn't match the video, say it may be invented. The script drops lines stamped past the end of the audio and warns on stderr; mention that warning if it appears.
 - Say in the answer that the transcript source was Gemini, not captions or Whisper.

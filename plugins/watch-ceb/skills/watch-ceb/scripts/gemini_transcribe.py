@@ -12,6 +12,7 @@ import base64
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -55,6 +56,8 @@ def to_seconds(t: str | None) -> float | None:
 
 
 def duration(path: str) -> float:
+    if not shutil.which("ffprobe") or not shutil.which("ffmpeg"):
+        sys.exit("ffmpeg/ffprobe not found on PATH; install ffmpeg (e.g. `sudo pacman -S ffmpeg` or `brew install ffmpeg`)")
     out = subprocess.check_output(
         ["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", path],
         text=True,
@@ -115,6 +118,21 @@ def shift(text: str, offset: float) -> str:
     return TS.sub(fix, text)
 
 
+def drop_out_of_range(text: str, limit: float) -> tuple[str, int]:
+    """Drop lines stamped past the end of the audio (a sign Gemini invented them)."""
+    kept, dropped = [], 0
+    for line in text.splitlines():
+        m = TS.match(line)
+        if m:
+            a, b, c = int(m[1]), int(m[2]), m[3]
+            secs = (a * 3600 + b * 60 + int(c)) if c else (a * 60 + b)
+            if secs > limit + 5:
+                dropped += 1
+                continue
+        kept.append(line)
+    return "\n".join(kept), dropped
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("source")
@@ -141,10 +159,16 @@ def main() -> None:
             pieces.append(shift(text, t))
             t += length
 
-    result = "\n".join(pieces)
+    result, dropped = drop_out_of_range("\n".join(pieces), end)
     if a.out:
         Path(a.out).write_text(result, encoding="utf-8")
     print(f"# Transcript source: gemini ({used}), Cebuano/English prompt")
+    if dropped:
+        print(
+            f"# WARNING: dropped {dropped} line(s) timestamped past the end of the audio; "
+            "the transcript may be partly invented",
+            file=sys.stderr,
+        )
     print(result)
 
 

@@ -21,11 +21,17 @@ Claude Code plugin marketplace.
    /plugin marketplace add bradautomates/claude-video
    /plugin install watch@claude-video
    ```
-2. `yt-dlp` and `ffmpeg` on your PATH.
+2. `ffmpeg` (with `ffprobe`) on your PATH, plus `yt-dlp` if you pass URLs.
 3. Your own Gemini key (https://aistudio.google.com/apikey):
    ```
    mkdir -p ~/.config/watch && echo 'GEMINI_API_KEY=your-key' >> ~/.config/watch/.env
    ```
+   The stock `watch` plugin also picks this key up, which is why the skill forces `--engine local` for frames.
+
+### Notes
+
+- Gemini can invent speech for silent or music-only audio; the script drops timestamps past the end of the clip and warns.
+- `GEMINI_MODEL` overrides the built-in model list.
 
 ## License
 
