@@ -33,6 +33,16 @@ Claude Code plugin marketplace.
 - Gemini can invent speech for silent or music-only audio; the script drops timestamps past the end of the clip and warns.
 - `GEMINI_MODEL` overrides the built-in model list.
 
+### Saving transcripts (optional)
+
+When it's done, the skill offers to save the transcript with an executive summary into a git repo you own. Each save writes `YYYY/YYYY-MM-DD-<slug>.md` (frontmatter with type, tags and participants, then the summary, then the transcript), rebuilds `INDEX.md`, commits, and pushes. Setup:
+
+```
+mkdir ~/transcripts && cd ~/transcripts && git init -b main   # add a private remote if you want pushes
+echo 'TRANSCRIPTS_DIR=~/transcripts' >> ~/.config/watch/.env
+echo 'TRANSCRIPTS_GH_USER=<gh-account>' >> ~/.config/watch/.env  # optional: gh account to switch to before pushing
+```
+
 ## License
 
 MIT — see [LICENSE](LICENSE).

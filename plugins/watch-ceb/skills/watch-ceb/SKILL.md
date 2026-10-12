@@ -1,8 +1,8 @@
 ---
 name: watch-ceb
-description: Watch a video whose speech may be Cebuano (Bisaya) mixed with English. Asks whether the audio is mostly Cebuano; if so, transcribes with Gemini (Whisper large-v3 garbles Cebuano) and takes frames from the stock watch skill; otherwise defers to /watch. Use for the user's own recordings, meetings, and DSM/consolidation videos.
+description: Watch a video whose speech may be Cebuano (Bisaya) mixed with English. Asks whether the audio is mostly Cebuano; if so, transcribes with Gemini (Whisper large-v3 garbles Cebuano) and takes frames from the stock watch skill; otherwise defers to /watch. Afterwards offers to save the transcript plus an executive summary to a git-versioned, indexed transcripts repo. Use for the user's own recordings, meetings, and DSM/consolidation videos.
 argument-hint: "<video-path-or-url> [question]"
-allowed-tools: Bash, Read, AskUserQuestion
+allowed-tools: Bash, Read, Write, AskUserQuestion
 user-invocable: true
 ---
 
@@ -50,12 +50,41 @@ python3 "$WATCH_PY" "<source>" $ENGINE --no-whisper [--detail ...] [--start T] [
 
 # Transcript. Needs a local file: for a URL, use the video file the watch run downloaded
 # (its report prints the working dir), or `yt-dlp -f bestaudio -o <tmp>/a.%(ext)s <url>`.
-python3 "$CEB_DIR/gemini_transcribe.py" "<local-file>" [--start T] [--end T]
+python3 "$CEB_DIR/gemini_transcribe.py" "<local-file>" [--start T] [--end T] --out "<workdir>/transcript.txt"
 ```
+
+Keep `--out`: Step 4 saves that file, so the transcript isn't retyped.
 
 Key comes from `GEMINI_API_KEY` in the environment or `~/.config/watch/.env` (`GEMINI_MODEL` overrides the model list). If the script exits with "GEMINI_API_KEY not set", tell the user where to get one (https://aistudio.google.com/apikey) and offer to fall back to stock `/watch`.
 
-Then follow the stock skill's Steps 3–5: `Read` every frame in one parallel batch, answer the question (or summarize) citing timestamps, and clean up the working dir unless follow-ups are likely.
+Then follow the stock skill's Steps 3–5: `Read` every frame in one parallel batch and answer the question (or summarize) citing timestamps. Do Step 4 before cleaning up the working dir (skip cleanup if follow-ups are likely).
+
+## Step 4 — Offer to save the transcript (Gemini path only)
+
+After answering, call `AskUserQuestion`:
+
+- Question: "Save this transcript with an executive summary to the transcripts repo?"
+- Options: "Yes, save and push (Recommended)", "Save locally, don't push", "No"
+
+Skip the question if the user already said whether to save. On "No", stop.
+
+On yes:
+
+1. **Executive summary.** Write it in English to `<workdir>/summary.md` with `Write`, from the transcript and frames. Use these headings and drop any that would be empty: **TL;DR** (2–4 bullets), **Decisions**, **Action items** (`- [ ] owner: task`), **Blockers / risks**, **Open questions**. Cite `[MM:SS]` for key points. Mark terms you're unsure of (see "Handling the transcript"). Don't use the summary heading as an H1; the script adds the headings.
+2. **Metadata.** Infer it and state it in one line so the user can correct it: title (e.g. "DSM", "Consolidation – Mentorship"), `--type` (one of `dsm`, `meeting`, `consolidation`, `demo`, `recording`, `other`), `--date` (recording date if known from the filename/context, else today), `--tags` (topics/projects/tickets, lowercase, e.g. `growth-portal,gp-263,quiz`), and `--participants` (first names heard).
+3. **Save:**
+
+```bash
+python3 "$CEB_DIR/save_transcript.py" --transcript "<workdir>/transcript.txt" \
+  --summary "<workdir>/summary.md" --title "<title>" --type <type> --date <YYYY-MM-DD> \
+  --tags "<a,b>" --participants "<a,b>" --source "<source>" [--no-push]
+```
+
+The script writes `<repo>/<YYYY>/<date>-<slug>.md` (frontmatter, then the summary, then the transcript), rebuilds `INDEX.md`, commits, and pushes. Before pushing it switches the active `gh` account to `TRANSCRIPTS_GH_USER` if that isn't the active one. Config comes from env vars or `~/.config/watch/.env`: `TRANSCRIPTS_DIR` (default `~/transcripts`) and `TRANSCRIPTS_GH_USER`.
+
+If it exits with "not a git repo", the repo hasn't been set up yet. Tell the user, and don't create a remote without asking. If the push fails, the commit is still local. Report the error and don't retry with another account.
+
+Report the saved path. To look up old transcripts, read `<repo>/INDEX.md`, or grep the frontmatter: `grep -l '^type: dsm' ~/transcripts/20*/*.md` or `grep -l 'tags:.*gp-263' ...`. Run `save_transcript.py --reindex` after editing files by hand.
 
 ## Handling the transcript
 
