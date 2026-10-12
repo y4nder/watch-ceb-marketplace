@@ -25,7 +25,8 @@ Parse the source and any question from the arguments. If the user's message alre
 CFG=${CLAUDE_CONFIG_DIR:-$HOME/.claude}
 WATCH_PY=$(ls -d "$CFG"/plugins/cache/claude-video/watch/*/skills/watch/scripts/watch.py 2>/dev/null | sort -V | tail -1)
 # Prefer the installed plugin copy over a personal ~/.claude/skills copy.
-CEB_DIR=$(ls -d "$CFG"/plugins/cache/*/watch-ceb/*/skills/watch-ceb/scripts "$CFG"/skills/watch-ceb/scripts 2>/dev/null | head -1)
+CEB_DIR=$(ls -d "$CFG"/plugins/cache/*/watch-ceb/*/skills/watch-ceb/scripts 2>/dev/null | sort -V | tail -1)
+[ -z "$CEB_DIR" ] && CEB_DIR=$(ls -d "$CFG"/skills/watch-ceb/scripts 2>/dev/null | head -1)
 ```
 
 If `WATCH_PY` is empty, tell the user the `watch` plugin isn't installed (`/plugin marketplace add bradautomates/claude-video`, then `/plugin install watch@claude-video`) and stop. If `CEB_DIR` is empty, the `watch-ceb` scripts are missing; stop.
