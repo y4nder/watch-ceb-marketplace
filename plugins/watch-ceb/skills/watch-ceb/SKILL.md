@@ -51,8 +51,10 @@ python3 "$WATCH_PY" "<source>" $ENGINE --no-whisper [--detail ...] [--start T] [
 
 # Transcript. Needs a local file: for a URL, use the video file the watch run downloaded
 # (its report prints the working dir), or `yt-dlp -f bestaudio -o <tmp>/a.%(ext)s <url>`.
-python3 "$CEB_DIR/gemini_transcribe.py" "<local-file>" [--start T] [--end T] --out "<workdir>/transcript.txt"
+python3 "$CEB_DIR/gemini_transcribe.py" "<local-file>" [--start T] [--end T] [--speakers "<names>"] [--host <name>] --out "<workdir>/transcript.txt"
 ```
+
+Every line comes out as `[MM:SS] Name: text`, so the transcript says who is speaking. Pass the roster with `--speakers` (names the user gave; for a stand-up or recurring meeting, the union of `participants:` from the three newest matching `type:` files in `$TRANSCRIPTS_DIR`, e.g. `grep -h '^participants:' $(ls -t ~/transcripts/20*/*dsm*.md | head -3)`), and `--host` with whoever runs the meeting and hands over between speakers, when the user says who. Without a roster Gemini falls back to `Speaker A`/`Speaker B`; leave a name off rather than guess one.
 
 Keep `--out`: Step 4 saves that file, so the transcript isn't retyped.
 
@@ -71,7 +73,7 @@ Skip the question if the user already said whether to save. On "No", stop.
 
 On yes:
 
-1. **Executive summary.** Write it in English to `<workdir>/summary.md` with `Write`, from the transcript and frames. Use these headings and drop any that would be empty: **TL;DR** (2–4 bullets), **Decisions**, **Action items** (`- [ ] owner: task`), **Blockers / risks**, **Open questions**. Cite `[MM:SS]` for key points. Mark terms you're unsure of (see "Handling the transcript"). Don't use the summary heading as an H1; the script adds the headings.
+1. **Executive summary.** Write it in English to `<workdir>/summary.md` with `Write`, from the transcript and frames. Use these headings and drop any that would be empty: **TL;DR** (2–4 bullets), **Decisions**, **Action items** (`- [ ] owner: task`, owner taken from the speaker labels), **Blockers / risks**, **Open questions**. Cite `[MM:SS]` for key points. Mark terms you're unsure of (see "Handling the transcript"). Don't use the summary heading as an H1; the script adds the headings.
 2. **Metadata.** Infer it and state it in one line so the user can correct it: title (e.g. "DSM", "Consolidation – Mentorship"), `--type` (one of `dsm`, `meeting`, `consolidation`, `demo`, `recording`, `other`), `--date` (recording date if known from the filename/context, else today), `--tags` (topics/projects/tickets, lowercase, e.g. `growth-portal,gp-263,quiz`), and `--participants` (first names heard).
 3. **Save:**
 
@@ -89,6 +91,7 @@ Report the saved path. To look up old transcripts, read `<repo>/INDEX.md`, or gr
 
 ## Handling the transcript
 
+- Speaker names are Gemini's inference from voice and hand-offs ("Thanks Joshua. Lawrence?"), not captions. Treat a `Speaker A`/`Speaker B` label as unidentified, and check a name before attributing a commitment to it when the line is short or overlapped.
 - It is Cebuano with English terms left as-is. Answer the user in English unless they write to you in Cebuano. Quote Cebuano lines verbatim and gloss them in English when it matters.
 - Gemini can mishear rare words (e.g. "vibe code" came back as "i-five code"/"i-hardcode"). Treat odd terms as uncertain and use the frames and context to sanity-check before stating them as fact.
 - If `gemini_transcribe.py` fails after its model fallbacks (503 "high demand" is common), retry once later; otherwise offer frames-only or stock Whisper, and warn that Whisper output will be unreliable for Cebuano.

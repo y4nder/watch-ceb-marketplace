@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Transcribe a video/audio file with Gemini, tuned for Cebuano (Bisaya) mixed with English.
 
-Usage: gemini_transcribe.py <file> [--start T] [--end T] [--model M] [--out FILE]
-Prints a transcript with absolute [MM:SS] timestamps to stdout. Pure stdlib.
+Usage: gemini_transcribe.py <file> [--start T] [--end T] [--speakers "A,B,C"] [--host NAME] [--model M] [--out FILE]
+Prints a transcript with absolute [MM:SS] Name: timestamps to stdout. Pure stdlib.
 Key: GEMINI_API_KEY from the environment or ~/.config/watch/.env.
 """
 from __future__ import annotations
@@ -30,9 +30,25 @@ PROMPT = (
     "Transcribe this audio verbatim. The speakers mix Bisaya/Cebuano with English. "
     "Keep the original language of each phrase; do not translate and do not convert Cebuano "
     "into Tagalog. Keep English words and technical terms in English. "
-    "Start a new line with a [MM:SS] timestamp (relative to the start of this audio) at every "
-    "speaker turn or roughly every 10-15 seconds. Output only the transcript."
+    "Start a new line with `[MM:SS] Name:` (timestamp relative to the start of this audio) at every "
+    "speaker turn, and roughly every 10-15 seconds within a long turn. Name is who is speaking: "
+    "identify speakers by voice and by names used when someone is addressed or hands over "
+    "(e.g. 'Thanks Joshua. Lawrence?' means Joshua spoke, Lawrence speaks next). A name called at the end of a turn is the NEXT speaker, never the person talking now. "
+    "If you cannot tell who is speaking, use 'Speaker A', 'Speaker B' consistently; never guess a name. "
+    "Output only the transcript."
 )
+
+
+def build_prompt(speakers: str | None, host: str | None, previous_tail: str | None) -> str:
+    prompt = PROMPT
+    if speakers:
+        prompt += f" Possible participants: {speakers}."
+    if host:
+        prompt += f" The meeting is run by {host}, who hands over between speakers."
+    if previous_tail:
+        prompt += (" This audio continues a recording; keep the same speaker names and labels as the "
+                   "end of the previous part, which was:\n" + previous_tail)
+    return prompt
 
 
 def load_key() -> str:
@@ -73,9 +89,9 @@ def extract(path: str, start: float, length: float, dest: str) -> None:
     )
 
 
-def call(model: str, key: str, audio: bytes) -> str:
+def call(model: str, key: str, audio: bytes, prompt: str) -> str:
     body = json.dumps({"contents": [{"parts": [
-        {"text": PROMPT},
+        {"text": prompt},
         {"inline_data": {"mime_type": "audio/mp3", "data": base64.b64encode(audio).decode()}},
     ]}]}).encode()
     req = urllib.request.Request(
@@ -86,12 +102,12 @@ def call(model: str, key: str, audio: bytes) -> str:
     return data["candidates"][0]["content"]["parts"][-1]["text"].strip()
 
 
-def transcribe_chunk(audio: bytes, key: str, models: list[str]) -> tuple[str, str]:
+def transcribe_chunk(audio: bytes, key: str, models: list[str], prompt: str) -> tuple[str, str]:
     last = None
     for model in models:
         for attempt in range(3):
             try:
-                return call(model, key, audio), model
+                return call(model, key, audio, prompt), model
             except urllib.error.HTTPError as e:
                 last = f"{model}: HTTP {e.code}"
                 if e.code in (429, 500, 503):
@@ -138,6 +154,8 @@ def main() -> None:
     ap.add_argument("source")
     ap.add_argument("--start")
     ap.add_argument("--end")
+    ap.add_argument("--speakers", help="comma-separated names of likely participants")
+    ap.add_argument("--host", help="who facilitates / hands over between speakers (stand-ups)")
     ap.add_argument("--model", default=os.environ.get("GEMINI_MODEL"))
     ap.add_argument("--out")
     a = ap.parse_args()
@@ -155,7 +173,8 @@ def main() -> None:
             length = min(CHUNK_SECONDS, end - t)
             mp3 = os.path.join(tmp, "chunk.mp3")
             extract(a.source, t, length, mp3)
-            text, used = transcribe_chunk(Path(mp3).read_bytes(), key, models)
+            tail = "\n".join(TS.sub("", ln).strip() for ln in pieces[-1].splitlines()[-6:]) if pieces else None
+            text, used = transcribe_chunk(Path(mp3).read_bytes(), key, models, build_prompt(a.speakers, a.host, tail))
             pieces.append(shift(text, t))
             t += length
 
